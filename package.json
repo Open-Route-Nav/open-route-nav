@@ -1,0 +1,28 @@
+{
+  "name": "@orn/open-route-nav",
+  "version": "0.0.2",
+  "description": "Open source satnav implementation",
+  "main": "open-route-nav.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lirwin3007/open-route-nav.git"
+  },
+  "author": "Louis Irwin",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lirwin3007/open-route-nav/issues"
+  },
+  "homepage": "https://github.com/lirwin3007/open-route-nav#readme",
+  "dependencies": {
+    "@mapbox/geojson-extent": "^1.0.0",
+    "@turf/turf": "^6.2.0",
+    "axios": "^0.21.1",
+    "mapbox-gl": "^2.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^7.17.0"
+  }
+}

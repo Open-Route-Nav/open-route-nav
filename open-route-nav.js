@@ -1,3 +1,8 @@
+const axios = require('axios');
+const turf = require('@turf/turf');
+const mapboxgl = require('mapbox-gl');
+const geojsonExtent = require('@mapbox/geojson-extent');
+
 class OpenRouteNav {
   constructor(mapboxToken, containerId, options={}) {
     // Mapbox setup
