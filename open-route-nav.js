@@ -10,7 +10,7 @@ class OpenRouteNav {
     mapboxgl.accessToken = mapboxToken;
     this.map = new mapboxgl.Map({
       container: containerId,
-      style: options.mapStyle ? options.mapStyle : 'mapbox://styles/mapbox/navigation-guidance-day-v2',
+      style: options.mapStyle ? options.mapStyle : 'mapbox://styles/mapbox/navigation-guidance-day-v2?optimize=true',
     });
 
     // Infobox setup
