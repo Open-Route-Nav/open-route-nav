@@ -1,7 +1,8 @@
-const axios = require('axios');
+import axios from 'axios';
+import mapboxgl from 'mapbox-gl';
 const turf = require('@turf/turf');
-const mapboxgl = require('mapbox-gl');
-const geojsonExtent = require('@mapbox/geojson-extent');
+import geojsonExtent from '@mapbox/geojson-extent';
+import positionMarkerDrawing from './position-marker-drawing.js';
 
 class OpenRouteNav {
   constructor(mapboxToken, containerId, options={}) {
@@ -9,7 +10,7 @@ class OpenRouteNav {
     mapboxgl.accessToken = mapboxToken;
     this.map = new mapboxgl.Map({
       container: containerId,
-      style: options.mapStyle ? options.mapStyle : 'mapbox://styles/mapbox/streets-v11',
+      style: options.mapStyle ? options.mapStyle : 'mapbox://styles/mapbox/navigation-guidance-day-v2',
     });
 
     // Infobox setup
@@ -101,7 +102,9 @@ class OpenRouteNav {
 
       stepStats.push({
         stepNo,
+        stepDistance: step.distance,
         distanceAlong: x,
+        distanceFromEnd: step.distance - x,
         distanceTo: d
       });
     }
@@ -112,19 +115,27 @@ class OpenRouteNav {
         return b;
       }
     });
-    this.currentStep = currentStep.stepNo;
-    var step = this.route.legs[0].steps[currentStep.stepNo];
 
-    currentStep.distanceAlong = step.distance - currentStep.distanceAlong;
+    const graceDistance = 15;
 
-    step.voiceInstructions.forEach(instruction => {
-      if (instruction.distanceAlongGeometry > currentStep.distanceAlong && !instruction.used) {
-        if (this.onSpeakFunction) {
-          this.onSpeakFunction(instruction.announcement);
+    if (currentStep.distanceTo > graceDistance || currentStep.distanceAlong < -graceDistance) {
+      this.state = "calculating";
+      this._requestRoute(false).then(() => {
+        this.state = "navigating";
+      });
+    } else {
+      this.currentStep = currentStep.stepNo;
+      var step = this.route.legs[0].steps[currentStep.stepNo];
+
+      step.voiceInstructions.forEach(instruction => {
+        if (instruction.distanceAlongGeometry > currentStep.distanceFromEnd && !instruction.used) {
+          if (this.onSpeakFunction) {
+            this.onSpeakFunction(instruction.announcement);
+          }
+          instruction.used = true;
         }
-        instruction.used = true;
-      }
-    });
+      });
+    }
 
   }
 
@@ -140,7 +151,7 @@ class OpenRouteNav {
     return axios.get(`https://api.mapbox.com/${endpoint}${paramString}`);
   }
 
-  _displayRoute(route) {
+  _displayRoute(route, zoomOut) {
     const geoJson = {
       type: 'Feature',
       properties: {},
@@ -152,7 +163,7 @@ class OpenRouteNav {
 
     if (this.map.getSource('route')) {
       this.map.getSource('route').setData(geoJson);
-    } else { // otherwise, make a new request
+    } else {
       this.map.addLayer({
         id: 'route',
         type: 'line',
@@ -169,18 +180,20 @@ class OpenRouteNav {
           'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 20, 50],
           'line-opacity': 0.75
         }
-      });
+      }, 'road-label-small');
     }
 
-    // Zoom to the bounds of the route
-    const xPadding = document.getElementById(this.containerId).offsetWidth * 0.1;
-    const yPadding = document.getElementById(this.containerId).offsetHeight * 0.1;
-    this.map.fitBounds(geojsonExtent(geoJson), {padding: {
-      top: yPadding,
-      bottom: yPadding,
-      left: xPadding,
-      right: xPadding
-    }});
+    if (zoomOut) {
+      // Zoom to the bounds of the route
+      const xPadding = document.getElementById(this.containerId).offsetWidth * 0.1;
+      const yPadding = document.getElementById(this.containerId).offsetHeight * 0.1;
+      this.map.fitBounds(geojsonExtent(geoJson), {padding: {
+        top: yPadding,
+        bottom: yPadding,
+        left: xPadding,
+        right: xPadding
+      }});
+    }
 
   }
 
@@ -199,9 +212,10 @@ class OpenRouteNav {
     this.infoBoxElements.speed.innerHTML = `<div class="orn-road-sign">30</div>`;
   }
 
-  _requestRoute() {
+  _requestRoute(zoomOut) {
+    this.state = "calculating";
     const targetString = `${this.options.position.location.lng},${this.options.position.location.lat};${this.options.target.lng},${this.options.target.lat}`;
-    this._mapboxRequest(
+    return this._mapboxRequest(
       `directions/v5/mapbox/${this.options.profile}/${targetString}`,
       {
         geometries: "geojson",
@@ -209,9 +223,12 @@ class OpenRouteNav {
         steps: true,
         banner_instructions: true,
         voice_instructions: true,
+        ...(this.options.position.bearing ? {
+          bearings: `${this.options.position.bearing},45;`,
+        } : {})
       }
     ).then(response => {
-      this._displayRoute(response.data.routes[0]);
+      this._displayRoute(response.data.routes[0], zoomOut);
       this._populateInfoBox(response.data);
       this.route = response.data.routes[0];
       this._updateSteps();
@@ -226,19 +243,17 @@ class OpenRouteNav {
       this.positionMarkerCanvas.width = 100;
       this.positionMarkerCanvas.height = 100;
       document.getElementById(this.containerId).appendChild(this.positionMarkerCanvas);
-
-      var ctx = this.positionMarkerCanvas.getContext("2d");
-      ctx.fillStyle = "#FF0000";
-      ctx.arc(50, 50, 50, 0, Math.PI * 2, true);
-      ctx.fill();
     }
+
+    var ctx = this.positionMarkerCanvas.getContext("2d");
+    positionMarkerDrawing.drawMarker(ctx, 360 - (this.options.position.bearing || 0));
 
     const loc = this.options.position.location;
     const coords = [
-      [loc.lng - 0.00003, loc.lat - 0.000015],
-      [loc.lng + 0.00003, loc.lat - 0.000015],
-      [loc.lng + 0.00003, loc.lat + 0.000015],
-      [loc.lng - 0.00003, loc.lat + 0.000015],
+      [loc.lng - 0.00006, loc.lat - 0.00003],
+      [loc.lng + 0.00006, loc.lat - 0.00003],
+      [loc.lng + 0.00006, loc.lat + 0.00003],
+      [loc.lng - 0.00006, loc.lat + 0.00003],
     ];
 
     if (this.map.getSource('position-marker')) {
@@ -247,7 +262,7 @@ class OpenRouteNav {
       this.map.addSource('position-marker', {
         type: 'canvas',
         canvas: 'orn-position-marker',
-        animate: false,
+        animate: true,
         coordinates: coords,
       });
       this.map.addLayer({
@@ -257,12 +272,12 @@ class OpenRouteNav {
       });
     }
 
-  }
+  } 
 
   startNavigation() {
     this.state = "navigating";
-    this.options.zoom = 20;
-    this.options.pitch = 75;
+    this.options.zoom = 19;
+    this.options.pitch = 70;
     this.map.flyTo({
       center: this.options.position.location, 
       bearing: this.options.position.bearing, 
@@ -274,16 +289,18 @@ class OpenRouteNav {
   set position(position) {
     this.options.position.location = position.location || this.options.position.location;
     this.options.position.bearing = position.bearing || this.options.position.bearing;
-    if (this.state == "navigating") {
+    if (this.state == "navigating" || this.state == "calculating") {
       this.map.flyTo({
         center: this.options.position.location, 
         bearing: this.options.position.bearing, 
         zoom: this.options.zoom,
         pitch: this.options.pitch,
       });
+      if (this.state == "navigating") {
+        this._updateSteps();
+      }
     }
     this._drawPositionMarker();
-    this._updateSteps();
   }
 
   get position() {
@@ -292,7 +309,10 @@ class OpenRouteNav {
 
   set target(target) {
     this.options.target = target;
-    this._requestRoute();
+    this.state = "calculating";
+    this._requestRoute(true).then(() => {
+      this.state = "viewRoute";
+    });
   }
   get target() {
     return this.options.target;
