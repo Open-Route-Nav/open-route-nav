@@ -161,11 +161,12 @@ class OpenRouteNav {
       }
     }
 
-    if (this.map.getSource('route')) {
-      this.map.getSource('route').setData(geoJson);
+    if (this.map.getSource('route-1')) {
+      this.map.getSource('route-1').setData(geoJson);
+      this.map.getSource('route-2').setData(geoJson);
     } else {
       this.map.addLayer({
-        id: 'route',
+        id: 'route-1',
         type: 'line',
         source: {
           type: 'geojson',
@@ -176,11 +177,26 @@ class OpenRouteNav {
           'line-cap': 'round'
         },
         paint: {
-          'line-color': '#3887be',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 20, 50],
-          'line-opacity': 0.75
+          'line-color': '#349beb',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 19, 20],
         }
       }, 'road-label-small');
+      this.map.addLayer({
+        id: 'route-2',
+        type: 'line',
+        source: {
+          type: 'geojson',
+          data: geoJson
+        },
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#2770a8',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 6, 19, 35],
+        }
+      }, 'route-1');
     }
 
     if (zoomOut) {
